@@ -7,6 +7,7 @@ module Database
 
     def initialize(cap_instance)
       @cap = cap_instance
+      p project_path
     end
 
     def mysql?
@@ -54,6 +55,10 @@ module Database
         klass = Object.module_eval("::Compressors::#{compressor_klass}", __FILE__, __LINE__)
         klass
       end
+    end
+
+    def project_path
+      "#{@cap.current_path.to_s}#{@cap.fetch(:project_dir)}"
     end
 
     private
@@ -106,7 +111,7 @@ module Database
     def initialize(cap_instance)
       super(cap_instance)
       puts "Loading remote database config"
-      @cap.within @cap.current_path do
+      @cap.within project_path do
         @cap.with rails_env: @cap.fetch(:rails_env) do
           dirty_config_content = @cap.capture(:rails, "runner \"puts '#{DBCONFIG_BEGIN_FLAG}' + ActiveRecord::Base.connection.instance_variable_get(:@config).to_yaml + '#{DBCONFIG_END_FLAG}'\"", '2>/dev/null')
           # Remove all warnings, errors and artefacts produced by bunlder, rails and other useful tools
@@ -117,7 +122,7 @@ module Database
     end
 
     def dump
-      @cap.execute "cd #{@cap.current_path} && #{dump_cmd} | #{compressor.compress('-', db_dump_file_path)}"
+      @cap.execute "cd #{project_path} && #{dump_cmd} | #{compressor.compress('-', db_dump_file_path)}"
       self
     end
 
@@ -136,9 +141,9 @@ module Database
     # cleanup = true removes the mysqldump file after loading, false leaves it in db/
     def load(file, cleanup)
       unzip_file = File.join(File.dirname(file), File.basename(file, ".#{compressor.file_extension}"))
-      # @cap.run "cd #{@cap.current_path} && bunzip2 -f #{file} && RAILS_ENV=#{@cap.rails_env} bundle exec rake db:drop db:create && #{import_cmd(unzip_file)}"
-      @cap.execute "cd #{@cap.current_path} && #{compressor.decompress(file)} && RAILS_ENV=#{@cap.fetch(:rails_env)} && #{import_cmd(unzip_file)}"
-      @cap.execute("cd #{@cap.current_path} && rm #{unzip_file}") if cleanup
+      # @cap.run "cd #{project_path} && bunzip2 -f #{file} && RAILS_ENV=#{@cap.rails_env} bundle exec rake db:drop db:create && #{import_cmd(unzip_file)}"
+      @cap.execute "cd #{project_path} && #{compressor.decompress(file)} && RAILS_ENV=#{@cap.fetch(:rails_env)} && #{import_cmd(unzip_file)}"
+      @cap.execute("cd #{project_path} && rm #{unzip_file}") if cleanup
     end
 
     private
@@ -148,7 +153,7 @@ module Database
     end
 
     def db_dump_dir
-      @cap.fetch(:db_dump_dir) || "#{@cap.current_path}/db"
+      @cap.fetch(:db_dump_dir) || "#{project_path}/db"
     end
   end
 
@@ -185,7 +190,7 @@ module Database
     end
 
     def upload
-      remote_file = "#{@cap.current_path}/#{output_file}"
+      remote_file = "#{project_path}/#{output_file}"
       @cap.upload! output_file, remote_file
     end
 
